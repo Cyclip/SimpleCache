@@ -9,7 +9,10 @@ These instructions will get you a copy of the project up and running on your loc
 ### Prerequisites
 No other modules are required
 - Python >=3.7.9
+- SimpleCache module
 
+#### Installing the module
+`python -m pip install cyclip-simplecache`
 
 ### Examples
 **Minimal usage**
@@ -18,7 +21,7 @@ from SimpleCache import Cache
 
 cache = Cache()
 
-@cache.implement
+@cache.cache_function
 def expensive_function(n, m):
     total = 0
     for i in n:
@@ -41,7 +44,7 @@ cache = Cache(
     compress=False              # Compress cache to save storage
 )
 
-@cache.implement
+@cache.cache_function
 def expensive_function(n):
     total = 0
     for i in n:
