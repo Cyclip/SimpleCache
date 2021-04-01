@@ -75,6 +75,7 @@ class Cache:
         evictionSize=1,
         startEmpty=False,
         compress=True,
+        log=False,
     ):
         """
         Constructs system with necessary attributes.
@@ -124,6 +125,7 @@ class Cache:
         self.__maxItemSize = maxItemSize
         self.evictionSize = evictionSize
         self.__compress = compress
+        self.__log = log
 
         self.__recentAccessed = []
         self.hits = 0
@@ -145,7 +147,8 @@ class Cache:
 
         @wraps(func)
         def wrapper(*args):
-            self.__logger.info(f"Called {func.__name__} with {args}")
+            if self.__log:
+                self.__logger.info(f"Called {func.__name__} with {args}")
             fileName = self.__build_file_name(func, args)
 
             if os.path.isfile(fileName):
@@ -174,7 +177,8 @@ class Cache:
         If 2 instances share the same directory, it will
         affect both instances.
         """
-        self.__logger.info("Cleared cache")
+        if self.__log:
+            self.__logger.info("Cleared cache")
         shutil.rmtree(self.cacheDir)  # Remoeve the cache directory
         os.mkdir(self.cacheDir)  # Create cache dir again
         self.__recentAccessed = []  # Reset recent accessed nodes
@@ -187,7 +191,8 @@ class Cache:
         Parameters:
             maxSize (int/None)      Set the new maxSize value
         """
-        self.__logger.info(f"Setting max size to {maxSize}")
+        if self.__log:
+            self.__logger.info(f"Setting max size to {maxSize}")
         self.__maxSize = maxSize  # Set max size
         self.__handle_cache_size()  # Adapt to new changes
 
@@ -199,7 +204,8 @@ class Cache:
         Parameters:
             maxItemSize (int/None)  Maximum item size
         """
-        self.__logger.info(f"Setting max item size to {maxItemSize}")
+        if self.__log:
+            self.__logger.info(f"Setting max item size to {maxItemSize}")
         self.__maxItemSize = maxItemSize
         self.__handle_cache_size()
 
@@ -247,16 +253,18 @@ class Cache:
                                                     'cache\\0ac817ca5029584c7e4dbc34ca564d97306a4170')
         """
         # Build a unique string to hash
-        self.__logger.info(f"Building file name for {func.__name__} with {args}")
+        if self.__log:
+            self.__logger.info(f"Building file name for {func.__name__} with {args}")
 
         # Hash with the specified algorithm and hexdigest
         # to produce a string
         fname = self.algorithm(
-            "".join([func.__name__.encode("utf8"), pickle.dumps(args)])
+            b"".join([func.__name__.encode("utf8"), pickle.dumps(args)])
         ).hexdigest()
 
         pathToFile = os.path.join(self.cacheDir, fname)
-        self.__logger.info(f"Built path {pathToFile}")
+        if self.__log:
+            self.__logger.info(f"Built path {pathToFile}")
         return pathToFile
 
     def __read_cache(self, fileName):
@@ -271,7 +279,8 @@ class Cache:
             variables (mixed)                       Variable name is literally 'variables'. Returns python
                                                     objects of an unknown type.
         """
-        self.__logger.info(f"Cache hit - {fileName}")
+        if self.__log:
+            self.__logger.info(f"Cache hit - {fileName}")
         # Cache hit
         with open(fileName, "rb") as f:
             content = self.__handle_decompression(f.read())
@@ -294,7 +303,8 @@ class Cache:
             returnVal (mixed)                       The function's return value to write into cache
         """
         # Cache miss
-        self.__logger.info(f"Cache miss: {fileName}")
+        if self.__log:
+            self.__logger.info(f"Cache miss: {fileName}")
         self.__handle_cache_size()
 
         with open(fileName, "wb") as f:
@@ -353,18 +363,20 @@ class Cache:
         cacheSize = self.__get_cache_size()
         if cacheSize > self.__maxSize:
             # Cache is full
-            self.__logger.info(
-                f"Cache size exceeds max size ({cacheSize} > {self.__maxSize})"
-            )
+            if self.__log:
+                self.__logger.info(
+                    f"Cache size exceeds max size ({cacheSize} > {self.__maxSize})"
+                )
             self.__evict(self.evictionSize)
 
     def __handle_cache_size_items(self):
         cacheSize = len(self.__recentAccessed)
         if cacheSize > self.__maxItemSize:
             # Cache is full
-            self.__logger.info(
-                f"Cache item size exceeds max item size ({cacheSize} > {self.__maxItemSize})"
-            )
+            if self.__log:
+                self.__logger.info(
+                    f"Cache item size exceeds max item size ({cacheSize} > {self.__maxItemSize})"
+                )
             self.__evict(self.evictionSize)
 
     def __shift_node(self, node):
@@ -377,7 +389,8 @@ class Cache:
         """
         index = self.__recentAccessed.index(node)
 
-        self.__logger.info(f"Shifting node {node}: {index}")
+        if self.__log:
+            self.__logger.info(f"Shifting node {node}: {index}")
 
         self.__recentAccessed = [
             self.__recentAccessed.pop(index)
@@ -393,5 +406,6 @@ class Cache:
         total = 0
         for entry in os.scandir(self.cacheDir):
             total += entry.stat(follow_symlinks=False).st_size
-        self.__logger.info(f"Cache size: {total} bytes")
+        if self.__log:
+            self.__logger.info(f"Cache size: {total} bytes")
         return total
