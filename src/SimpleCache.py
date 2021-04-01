@@ -1,5 +1,5 @@
 import hashlib  # Hash filenames
-import pathlib  # Cache dir
+from pathlib import Path  # Cache dir
 from functools import wraps  # Decorators
 import zlib  # Compression for file sizes
 import pickle  # Store objects
@@ -39,6 +39,10 @@ class Cache:
                                                 WILL ERASE ALL PREVIOUS CACHE obviously
                                                 Default: False
 
+        compress (bool)                     :   Use compression when writing/reading cache. It reduces space used, but may
+                                                be disabled if optimisation is lacking.
+                                                Default: True
+
     Attributes:                                 (Including parameters if stated)
         __recentAccessed (list)                 Lists the recently accessed nodes in order of when it was accessed.
                                                 This is so least recently used nodes can be evicted to gain space.
@@ -70,6 +74,7 @@ class Cache:
         maxItemSize=None,
         evictionSize=1,
         startEmpty=False,
+        compress=True,
     ):
         """
         Constructs system with necessary attributes.
@@ -100,6 +105,10 @@ class Cache:
                                                     WILL ERASE ALL PREVIOUS CACHE obviously
                                                     Default: False
 
+            compress (bool)                     :   Use compression when writing/reading cache. It reduces space used, but may
+                                                    be disabled if optimisation is lacking.
+                                                    Default: True
+
         Attributes:                                 (Including parameters if stated)
             __recentAccessed (list)                 Lists the recently accessed nodes in order of when it was accessed.
                                                     This is so least recently used nodes can be evicted to gain space.
@@ -114,6 +123,7 @@ class Cache:
         self.__maxSize = maxSize
         self.__maxItemSize = maxItemSize
         self.evictionSize = evictionSize
+        self.__compress = compress
 
         self.__recentAccessed = []
         self.hits = 0
@@ -121,7 +131,7 @@ class Cache:
         self.__logger = logging.getLogger(__name__)
         logging.basicConfig(level=logging.INFO)
 
-        pathlib.Path(self.cacheDir).mkdir(exist_ok=True)
+        Path(self.cacheDir).mkdir(exist_ok=True)
 
         if startEmpty:
             self.clear()
@@ -208,10 +218,12 @@ class Cache:
                 "filled": filled,                   (float) Percentage of cache used up (0.0-1.0)
             }
         """
-        hits = self.hits
-        misses = self.misses
-        cacheSizeBytes = self.__get_cache_size()
-        cacheSize = len(self.__recentAccessed)
+        hits, misses, cacheSizeBytes, cacheSize = (
+            self.hits,
+            self.misses,
+            self.__get_cache_size(),
+            len(self.__recentAccessed),
+        )
         filled = cacheSizeBytes / self.__maxSize
 
         return {
@@ -236,11 +248,12 @@ class Cache:
         """
         # Build a unique string to hash
         self.__logger.info(f"Building file name for {func.__name__} with {args}")
-        fname = func.__name__
 
         # Hash with the specified algorithm and hexdigest
         # to produce a string
-        fname = self.algorithm(fname.encode("utf8") + pickle.dumps(args)).hexdigest()
+        fname = self.algorithm(
+            "".join([func.__name__.encode("utf8"), pickle.dumps(args)])
+        ).hexdigest()
 
         pathToFile = os.path.join(self.cacheDir, fname)
         self.__logger.info(f"Built path {pathToFile}")
@@ -261,7 +274,7 @@ class Cache:
         self.__logger.info(f"Cache hit - {fileName}")
         # Cache hit
         with open(fileName, "rb") as f:
-            content = zlib.decompress(f.read())
+            content = self.__handle_decompression(f.read())
             variables = pickle.loads(content)
 
         # Move node to front
@@ -286,11 +299,39 @@ class Cache:
 
         with open(fileName, "wb") as f:
             packed = pickle.dumps(returnVal)
-            compressed = zlib.compress(packed)
-            f.write(compressed)
+            final = self.__handle_compression(packed)
+            f.write(final)
 
         node = os.path.relpath(fileName, "cache")
         self.__recentAccessed.insert(0, node)
+
+    def __handle_compression(self, x):
+        """
+        Compress if compression is enabled, else return the value as-is
+
+        Paramters:
+            x (bytes)                               Text to compress
+
+        Returns:
+            x (bytes)                               Text compressed/retained
+        """
+        if self.__compress:
+            return zlib.compress(x)
+        return x
+
+    def __handle_decompression(self, x):
+        """
+        Deompress if compression is enabled, else return the value as-is
+
+        Paramters:
+            x (bytes)                               Text to decompress
+
+        Returns:
+            x (bytes)                               Text decompressed/retained
+        """
+        if self.__compress:
+            return zlib.decompress(x)
+        return x
 
     def __handle_cache_size(self):
         """
