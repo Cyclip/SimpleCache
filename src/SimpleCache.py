@@ -1,11 +1,11 @@
 import hashlib  # Hash filenames
 import pathlib  # Cache dir
-import os
 from functools import wraps  # Decorators
 import zlib  # Compression for file sizes
 import pickle  # Store objects
 import shutil  # Clear cache faster
 import logging
+import os
 
 
 class Cache:
@@ -26,6 +26,11 @@ class Cache:
                                                 Default: 5000000
                                                 This attribute cannot be accessed, but can be changed through set_maxSize()
 
+        maxItemSize (int/None)              :   Maximum items in cache. Set to None if you want to use only maxSize
+                                                Default: None
+                                                This attribute cannot be accessed, but can be changed through set_maxItemSize()
+
+
         evictionSize (int)                  :   Number of LRU items to evict when cache is full
                                                 Default: 1
                                                 This attribute can be accessed and changed.
@@ -41,6 +46,7 @@ class Cache:
         hits (int)                              All successful cache queries (when a value is found in cache)
 
         misses (int)                            All unsuccessful cache queries (when a value is not found in cache)
+
 
     Functions:
         clear()                             :   Clear cache
@@ -61,6 +67,7 @@ class Cache:
         cacheDir="cache",
         algorithm=hashlib.sha1,
         maxSize=1000000,
+        maxItemSize=None,
         evictionSize=1,
         startEmpty=False,
     ):
@@ -79,6 +86,11 @@ class Cache:
             maxSize (int)                       :   Maximum cache size in bytes
                                                     Default: 5000000
                                                     This attribute cannot be accessed, but can be changed through set_maxSize()
+
+            maxItemSize (int/None)              :   Maximum items in cache. Set to None if you want to use only maxSize
+                                                    Default: None
+                                                    This attribute cannot be accessed, but can be changed through set_maxItemSize()
+
 
             evictionSize (int)                  :   Number of LRU items to evict when cache is full
                                                     Default: 1
@@ -100,6 +112,7 @@ class Cache:
         self.cacheDir = cacheDir
         self.algorithm = algorithm
         self.__maxSize = maxSize
+        self.__maxItemSize = maxItemSize
         self.evictionSize = evictionSize
 
         self.__recentAccessed = []
@@ -152,8 +165,9 @@ class Cache:
         affect both instances.
         """
         self.__logger.info("Cleared cache")
-        shutil.rmtree(self.cacheDir)
-        os.mkdir(self.cacheDir)
+        shutil.rmtree(self.cacheDir)  # Remoeve the cache directory
+        os.mkdir(self.cacheDir)  # Create cache dir again
+        self.__recentAccessed = []  # Reset recent accessed nodes
 
     def set_maxSize(self, maxSize):
         """
@@ -161,11 +175,23 @@ class Cache:
         new changes.
 
         Parameters:
-            maxSize (int)                           Set the new maxSize value
+            maxSize (int/None)      Set the new maxSize value
         """
-        self.__logger.info("Cleared cache")
+        self.__logger.info(f"Setting max size to {maxSize}")
         self.__maxSize = maxSize  # Set max size
         self.__handle_cache_size()  # Adapt to new changes
+
+    def set_maxItemSize(self, maxItemSize):
+        """
+        Set the max cache item size and adapt to the new
+        changes.
+
+        Parameters:
+            maxItemSize (int/None)  Maximum item size
+        """
+        self.__logger.info(f"Setting max item size to {maxItemSize}")
+        self.__maxItemSize = maxItemSize
+        self.__handle_cache_size()
 
     def get_info(self):
         """
@@ -274,13 +300,29 @@ class Cache:
         this.
 
         To counter, evictionSize can be used to reduce the possibility of
-        this happening.
+        this happening. maxItemSize can also place a hard limit on the amount
+        of cached items.
         """
+        if self.__maxSize is not None:
+            self.__handle_cache_size_bytes()
+        if self.__maxItemSize is not None:
+            self.__handle_cache_size_items()
+
+    def __handle_cache_size_bytes(self):
         cacheSize = self.__get_cache_size()
         if cacheSize > self.__maxSize:
             # Cache is full
             self.__logger.info(
                 f"Cache size exceeds max size ({cacheSize} > {self.__maxSize})"
+            )
+            self.__evict(self.evictionSize)
+
+    def __handle_cache_size_items(self):
+        cacheSize = len(self.__recentAccessed)
+        if cacheSize > self.__maxItemSize:
+            # Cache is full
+            self.__logger.info(
+                f"Cache item size exceeds max item size ({cacheSize} > {self.__maxItemSize})"
             )
             self.__evict(self.evictionSize)
 

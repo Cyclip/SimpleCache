@@ -1,9 +1,8 @@
 import time
 import logging
+import SimpleCache
 
 logging.getLogger(__name__)
-
-import SimpleCache
 
 cache = SimpleCache.Cache(maxSize=200000)
 
